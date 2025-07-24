@@ -1,20 +1,17 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jul 24 15:15:58 2025
+
+@author: arun
+"""
+
 import pandas as pd
 import numpy as np
 import re
 import os
 import json
 import math
-
-# def calculate_distance_to_vector(point, vector_point, vector_direction):
-#     vector_point = np.array(vector_point)
-#     vector_direction = np.array(vector_direction)
-#     point = np.array(point)
-
-#     unit_vector = vector_direction / np.linalg.norm(vector_direction)
-#     vector_to_point = point - vector_point
-#     distance_along_vector = np.dot(vector_to_point, unit_vector)
-
-#     return distance_along_vector
 
 
 def custom_round(value):
@@ -151,9 +148,6 @@ def calculate_distance_to_line(point, entry, trajectory_vec):
         distance = np.linalg.norm(point - projection_point)
         return distance
 
-    # distance = np.linalg.norm(point - projection_point)
-    # return distance
-
 
 def assign_contacts_to_electrodes(electrodes, contacts, max_distance_threshold=4.0):
     """
@@ -187,34 +181,26 @@ def assign_contacts_to_electrodes(electrodes, contacts, max_distance_threshold=4
     return electrodes
 
 
-def new_label_contacts(target_point, contacts, electrode_label):
+def new_label_contacts(target_point, contacts):
     contacts = np.array(contacts, dtype=np.float64)
+
     target_point = np.array(target_point)
-    # distances = np.linalg.norm(contacts - target_point, axis=1)
+
     distances = [np.sqrt(np.sum((point - target_point) ** 2)) for point in contacts]
 
+    sorted_indices = np.argsort(distances)
+
+    sorted_contacts = contacts[sorted_indices]
+
     inter_contact = [
-        np.linalg.norm(contacts[i] - contacts[i - 1])
-        for i, contact in enumerate(contacts)
+        np.linalg.norm(sorted_contacts[i] - sorted_contacts[i - 1])
+        for i, contact in enumerate(sorted_contacts)
         if i > 0
     ]
-    # print(np.mean(inter_contact))
+
     spacing = custom_round(np.mean(inter_contact))
-    # print(spacing)
 
-    sorted_indices = np.argsort(distances)
-    # print(sorted_indices)
-
-    #   contact_labels = [f"{electrode_label}{i+1}" for i in range(len(contacts))]
-    contact_labels = [f"{electrode_label}-{i+1:02}" for i in range(len(contacts))]
-    sorted_contact_labels = [contact_labels[i] for i in sorted_indices]
-    #   #print(sorted_contact_labels)
-
-    renamed_labels = [sorted_contact_labels[i] for i in range(len(sorted_indices))]
-    # print(renamed_labels)
-
-    # Update dictionary with new labels
-    return np.array(renamed_labels), spacing
+    return np.array(sorted_contacts), spacing
 
 
 def label_multiple_electrodes(electrodes, manufacturer_dict):
@@ -222,11 +208,14 @@ def label_multiple_electrodes(electrodes, manufacturer_dict):
         if electrode["contacts"]:
             num_contacts = len(electrode["contacts"])
             # print(num_contacts)
-            electrode["contact_labels"], spacing = new_label_contacts(
-                electrode["target_point"],
-                electrode["contacts"],
-                electrode["elec_label"],
+
+            electrode["sorted_contacts"], spacing = new_label_contacts(
+                electrode["target_point"], electrode["contacts"]
             )
+            electrode["contact_labels"] = [
+                f"{electrode['elec_label']}-{i+1:02}" for i in range(num_contacts)
+            ]
+
             if manufacturer_dict.get((num_contacts, spacing)):
                 electrode["elec_type"] = manufacturer_dict.get((num_contacts, spacing))[
                     0
@@ -243,7 +232,7 @@ def convert_to_df(labelled_final):
     # Iterate through each electrode in the labeled electrodes list
     for electrode in labelled_final:
         contact_labels = electrode.get("contact_labels", [])
-        contacts = electrode.get("contacts", [])
+        contacts = electrode.get("sorted_contacts", [])
         elec_type = electrode.get("elec_type", [])
 
         # Iterate through each contact and corresponding label
